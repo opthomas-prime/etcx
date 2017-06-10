@@ -5,34 +5,27 @@ function install_etcx_file {
     file=`echo $1 | grep -Po '[^.].+(?=.etcx.*$)'`
     mode=`stat -c '%a' $1`
 
-    echo $owner
-    echo $file
-    echo $mode
+    getent passwd $owner > /dev/null
+    if [ $? -ne 0 ]; then echo "unknown user ${owner}, skipping ${file}" && return; fi
 
-    return
+    getent group $owner > /dev/null
+    if [ $? -ne 0 ]; then echo "unknown group ${owner}, skipping ${file}" && return; fi
 
-    getent passwd $1 > /dev/null
-    if [ $? -ne 0 ]; then return; fi
+    if [ ! -d `dirname $file` ]; then echo "missing target directory, skipping ${file}" && return; fi
 
-    getent group $1 > /dev/null
-    if [ $? -ne 0 ]; then return; fi
+    cmd="install --no-target-directory --owner=$owner --group=$owner --mode='$mode' $1 $file"
 
-    if [ ! -d `dirname $target_file` ]; then return; fi
-
-    cmd="install --no-target-directory --owner=$owner --group=$owner --mode='$target_mode' $1 $target_file"
-
-    if [ -n $DRYRUN ]; then
-        echo $cmd
-    else
+    echo $cmd
+    if [ $DRYRUN -eq 0 ]; then
         eval $cmd
     fi
 }
 
 USAGE="$0 [-d] [-s sourcedir]
--d dryrun (just prints the install commands)
+-d dryrun (only print the install commands)
 -s source directory (defaults to ./etc)
 "
-
+DRYRUN=0
 while getopts "hds:" opt; do
     case ${opt} in
         h ) printf "$USAGE" && exit 0;;
@@ -42,14 +35,16 @@ while getopts "hds:" opt; do
 done
 
 if [ -z $SOURCE_DIR ]; then SOURCE_DIR=./etc; fi
+if [ ! -d $SOURCE_DIR ]; then
+    echo "source directory doesn't exist"
+    exit 1
+fi
 
 cd $SOURCE_DIR
 
-for file in `find . -type f -name '*.etcx.*@all'`; do
+for file in `find . -type f -name '*@all'`; do
     install_etcx_file $file
 done
-
-exit 0
 
 hostname=`hostname`
 for file in `find . -type f -not -name '*@all'`; do
